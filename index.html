@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PayKaro: dummy payment gateway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2F5F3; --surface:#FFFFFF; --surface-2:#EEF2EF; --ink:#101814; --muted:#5A6860; --line:#DCE3DF;
+  --accent:#0A7F57; --accent-ink:#FFFFFF; --accent-soft:#E1F3EA;
+  --ok:#0A7F57; --ok-bg:#E1F3EA; --bad:#C0392B; --bad-bg:#FBE7E4; --warn:#8A5A00; --warn-bg:#FFF3D6;
+  --stage:#DCE2DF; --bezel:#0C0F0E;
+  --sans:"Instrument Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light; box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B100E; --surface:#141B18; --surface-2:#1B2420; --ink:#E7EEEA; --muted:#93A39A; --line:#27312C;
+    --accent:#3DD598; --accent-ink:#06150E; --accent-soft:#16312A;
+    --ok:#3DD598; --ok-bg:#12302A; --bad:#F06A5D; --bad-bg:#3A1D22; --warn:#F2C14E; --warn-bg:#33290F;
+    --stage:#050807; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B100E; --surface:#141B18; --surface-2:#1B2420; --ink:#E7EEEA; --muted:#93A39A; --line:#27312C;
+  --accent:#3DD598; --accent-ink:#06150E; --accent-soft:#16312A;
+  --ok:#3DD598; --ok-bg:#12302A; --bad:#F06A5D; --bad-bg:#3A1D22; --warn:#F2C14E; --warn-bg:#33290F;
+  --stage:#050807; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{height:100%;margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;display:flex;justify-content:center;align-items:stretch;-webkit-tap-highlight-color:transparent}
+button,input{font:inherit;color:inherit}
+button{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+.mono{font-family:var(--mono)} .muted{color:var(--muted)} .small{font-size:13px}
+h1{font-size:26px;line-height:1.15;margin:4px 0 6px;letter-spacing:-.015em}
+h2{font-size:17px;margin:0 0 10px}
+h3{font-size:13.5px;margin:20px 0 8px;color:var(--muted);font-weight:600}
+
+/* ===== Keyframes ===== */
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes fadeOut{to{opacity:0}}
+@keyframes sheetUp{from{transform:translateY(100%)}to{transform:none}}
+@keyframes sheetDown{to{transform:translateY(100%)}}
+@keyframes inFwd{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:none}}
+@keyframes inBack{from{opacity:0;transform:translateX(-28px)}to{opacity:1;transform:none}}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes shake{20%{transform:translateX(-5px)}40%{transform:translateX(5px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes badgePop{from{transform:scale(.4);opacity:0}to{transform:none;opacity:1}}
+@keyframes burst{from{transform:rotate(var(--a)) translateY(-32px) scale(1);opacity:1}to{transform:rotate(var(--a)) translateY(-70px) scale(.3);opacity:0}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes indet{0%{transform:translateX(-100%)}100%{transform:translateX(260%)}}
+@keyframes redirbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes errIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 45%,transparent)}60%{box-shadow:0 0 0 10px transparent}}
+
+/* ===== Phone shell ===== */
+.phone{position:relative;width:100%;max-width:430px;height:100%;display:flex;flex-direction:column;background:var(--bg);overflow:hidden}
+@media (min-width:600px){
+  body{align-items:center;background:var(--stage);padding:24px}
+  .phone{height:min(840px,100%);border-radius:42px;box-shadow:0 0 0 9px var(--bezel),0 0 0 11px rgba(255,255,255,.08),0 40px 90px -20px rgba(0,0,0,.5)}
+  .phone::before{content:"";position:absolute;top:9px;left:50%;transform:translateX(-50%);width:92px;height:24px;border-radius:14px;background:var(--bezel);z-index:90}
+  .appbar{padding-top:42px!important}
+}
+.appbar{flex:none;padding:16px 20px 6px;display:flex;align-items:center;justify-content:space-between}
+.wm{display:flex;align-items:center;gap:9px;font-weight:700;font-size:18px;letter-spacing:-.01em}
+.pk-mark{width:30px;height:30px;border-radius:9px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:16px;flex:none}
+.screens{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden}
+.screen{padding:8px 16px 0;min-height:100%}
+.screen.in{animation:rise .3s ease-out}
+
+.tabbar{flex:none;display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);background:var(--surface);padding:6px 8px 8px}
+.tab{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;cursor:pointer;color:var(--muted);font-size:11.5px;font-weight:600;min-height:52px;transition:color .2s}
+.tab .pill{width:52px;height:30px;border-radius:15px;display:grid;place-items:center;transition:background .25s,transform .15s}
+.tab svg{width:21px;height:21px}
+.tab:active .pill{transform:scale(.92)}
+.tab[aria-selected="true"]{color:var(--accent)}
+.tab[aria-selected="true"] .pill{background:var(--accent-soft)}
+
+/* ===== Shared UI ===== */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:16px}
+.avatar{width:56px;height:56px;border-radius:50%;color:#fff;display:grid;place-items:center;font-weight:700;font-size:24px;flex:none;background:var(--accent);transition:background .3s}
+.avatar.sm{width:38px;height:38px;font-size:16px}
+.err{color:var(--bad);font-size:13px;margin-top:4px}
+.err:not(:empty){animation:errIn .2s ease-out}
+.field{margin-bottom:14px}
+.field>label.st{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+.btn{width:100%;border:0;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:14px;min-height:54px;cursor:pointer;font-size:16px;transition:transform .12s ease,filter .15s ease}
+.btn:hover:not(:disabled){filter:brightness(1.07)}
+.btn:active:not(:disabled){transform:scale(.985)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-line{width:100%;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:11px;min-height:48px;cursor:pointer;font-weight:600;margin-top:10px;transition:border-color .15s}
+.btn-line:hover{border-color:var(--accent)}
+.chip{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;font-weight:600;white-space:nowrap}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.bad{background:var(--bad-bg);color:var(--bad)} .chip.warn{background:var(--warn-bg);color:var(--warn)}
+.shake{animation:shake .35s}
+
+/* Floating labels */
+.fl{position:relative}
+.fl input{width:100%;min-height:56px;padding:23px 14px 6px;border:1px solid var(--line);border-radius:14px;background:var(--surface);transition:border-color .15s,box-shadow .15s}
+.fl label{position:absolute;left:15px;top:17px;color:var(--muted);font-size:15px;pointer-events:none;transition:top .15s ease,font-size .15s ease,color .15s}
+.fl input:focus+label,.fl input:not(:placeholder-shown)+label{top:7px;font-size:11.5px;font-weight:600}
+.fl input:focus+label{color:var(--accent)}
+.fl input:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.fl input[aria-invalid="true"]{border-color:var(--bad)}
+.fl.pre input{padding-left:50px}
+.fl.pre label{left:50px;top:7px;font-size:11.5px;font-weight:600}
+.fl .pfx{position:absolute;left:15px;bottom:10px;color:var(--muted);font-size:15px}
+.fl.tag input{padding-right:104px}
+.nettag{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);padding:2px 9px;border-radius:99px;pointer-events:none}
+.nettag:empty{display:none}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* ===== Pay screen ===== */
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:10px 0 4px}
+.hero .avatar{width:64px;height:64px;font-size:28px}
+.hero-name{font-weight:700;font-size:19px;letter-spacing:-.01em;line-height:1.25;max-width:100%;overflow-wrap:anywhere}
+.amtbox{text-align:center;margin:14px 0 6px}
+.amtrow{display:flex;justify-content:center;align-items:baseline;gap:4px;border-bottom:2px solid var(--line);padding:4px 0 6px;margin:0 24px;transition:border-color .2s}
+.amtrow:focus-within{border-color:var(--accent)}
+.amtrow span{font-size:30px;font-weight:700;color:var(--muted)}
+.amtrow input{border:0;background:transparent;font-size:44px;font-weight:700;letter-spacing:-.02em;width:100%;min-width:0;max-width:240px;text-align:left;outline:none;font-family:var(--sans)}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+.chips button{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 14px;font-weight:600;font-size:13.5px;cursor:pointer;min-height:36px;transition:border-color .15s,background .15s,transform .12s}
+.chips button:hover{border-color:var(--accent);background:var(--accent-soft)}
+.chips button:active{transform:scale(.95)}
+.dock{position:sticky;bottom:0;margin:18px -16px 0;padding:14px 16px 14px;background:linear-gradient(to top,var(--bg) 72%,transparent)}
+.dock p{margin:8px 0 0;text-align:center}
+
+/* ===== Activity ===== */
+.sec-head{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.sec-head h1{margin:0}
+.sec-head .acts{display:flex;gap:6px}
+.sec-head button{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:6px 12px;cursor:pointer;font-weight:600;font-size:12.5px;min-height:34px}
+.txlist{list-style:none;margin:0;padding:0;display:grid;gap:10px;padding-bottom:16px}
+.tx{display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px}
+.tx:first-child{animation:rise .3s ease-out}
+.txic{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;flex:none}
+.txic.ok{background:var(--ok-bg);color:var(--ok)} .txic.bad{background:var(--bad-bg);color:var(--bad)}
+.txic svg{width:20px;height:20px}
+.txmain{flex:1;min-width:0}
+.txmain b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.txmain span{display:block;font-size:12.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.txmain code{font-size:11.5px;color:var(--muted)}
+.txamt{text-align:right;display:grid;gap:3px;justify-items:end}
+.txamt b{font-family:var(--mono);font-size:14px}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.empty svg{width:44px;height:44px;opacity:.5;margin-bottom:8px}
+
+/* ===== Test data ===== */
+.tlist{display:grid;gap:8px}
+.trow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;text-align:left;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 14px;cursor:pointer;min-height:56px;transition:border-color .15s,transform .12s}
+.trow:hover{border-color:var(--accent)} .trow:active{transform:scale(.99)}
+.trow>span:first-child{min-width:0}
+.trow code{font-size:13.5px;display:block}
+.trow small{color:var(--muted);font-size:12px}
+.trow svg{width:17px;height:17px;color:var(--muted);flex:none}
+
+/* ===== Checkout sheet ===== */
+.layer{position:absolute;inset:0;z-index:60}
+.scrim{position:absolute;inset:0;background:rgba(6,12,9,.55);animation:fadeIn .25s ease-out}
+.layer.out .scrim{animation:fadeOut .25s ease-in forwards}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:44px;background:var(--surface);border-radius:24px 24px 0 0;display:flex;flex-direction:column;overflow:hidden;animation:sheetUp .38s cubic-bezier(.2,.9,.2,1);box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+.layer.out .sheet{animation:sheetDown .26s ease-in forwards}
+.grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:8px auto 0;flex:none}
+.sh-head{display:flex;align-items:center;gap:8px;padding:8px 12px 6px 16px;flex:none;min-height:54px}
+.sh-head h2{margin:0;flex:1;font-size:17px}
+.ibtn{width:38px;height:38px;border-radius:50%;border:0;background:var(--surface-2);cursor:pointer;display:grid;place-items:center;color:var(--ink);flex:none;transition:background .15s,transform .12s}
+.ibtn:hover{background:var(--accent-soft)} .ibtn:active{transform:scale(.92)}
+.ibtn svg{width:17px;height:17px}
+.sh-sum{display:flex;align-items:center;gap:12px;margin:2px 16px 8px;padding:12px;border-radius:16px;background:var(--surface-2);flex:none}
+.sh-sum-main{flex:1;min-width:0}
+.sh-sum-main b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sh-sum-main span{font-size:12px;color:var(--muted)}
+.sh-sum>b{font-family:var(--mono);font-size:18px}
+.co-body{flex:1;overflow-y:auto;overflow-x:hidden;min-height:0}
+.view{padding:8px 16px 18px}
+.view.in-fwd{animation:inFwd .3s cubic-bezier(.2,.8,.2,1) both}
+.view.in-back{animation:inBack .3s cubic-bezier(.2,.8,.2,1) both}
+.view.center{text-align:center;padding-top:34px}
+.co-foot{flex:none;border-top:1px solid var(--line);padding:12px 16px 14px;background:var(--surface)}
+
+.contact-bar{display:flex;justify-content:space-between;align-items:center;background:var(--surface-2);border-radius:14px;padding:10px 14px;font-size:13px;margin-bottom:14px}
+.contact-bar button{border:0;background:none;color:var(--accent);font-weight:700;cursor:pointer;padding:8px}
+.methods{display:flex;flex-direction:column;gap:10px}
+.method{display:flex;align-items:center;gap:12px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);cursor:pointer;text-align:left;min-height:72px;animation:rise .38s cubic-bezier(.2,.8,.2,1) both;transition:border-color .15s,box-shadow .15s,transform .12s}
+.method:nth-child(1){animation-delay:.03s}.method:nth-child(2){animation-delay:.09s}.method:nth-child(3){animation-delay:.15s}
+.method:hover{border-color:var(--accent)}
+.method:active{transform:scale(.985)}
+.method .ic{width:42px;height:42px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.method .ic svg{width:22px;height:22px}
+.method>span{flex:1}
+.method>span b{display:block;font-size:15px}
+.method>span small{color:var(--muted);font-size:12.5px}
+.method .chev{color:var(--muted);transition:transform .15s}
+.method:hover .chev{transform:translateX(3px);color:var(--accent)}
+
+/* Card preview */
+.cflip{perspective:900px;height:150px;margin:0 0 14px}
+.cflip-in{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.2,.8,.2,1)}
+.cflip.back .cflip-in{transform:rotateY(180deg)}
+.cface{position:absolute;inset:0;border-radius:16px;color:#fff;backface-visibility:hidden;-webkit-backface-visibility:hidden;overflow:hidden;background:#3A4540;transition:background .4s ease}
+.cflip[data-net="Visa"] .cface{background:#1F3A93}
+.cflip[data-net="Mastercard"] .cface{background:#2E2A33}
+.cflip[data-net="Amex"] .cface{background:#1C6E73}
+.cflip[data-net="RuPay"] .cface{background:#5A2E7A}
+.cface.f{padding:14px 16px;display:flex;flex-direction:column;justify-content:space-between}
+.cface.f::before{content:"";position:absolute;right:-50px;top:-70px;width:210px;height:210px;border-radius:50%;background:rgba(255,255,255,.08)}
+.cface.b{transform:rotateY(180deg)}
+.cf-top{display:flex;justify-content:space-between;align-items:center;font-weight:600;font-size:13px;position:relative}
+.chipicon{width:34px;height:25px;border-radius:5px;background:linear-gradient(135deg,#E8D28C,#B89B45)}
+.cf-num{font-family:var(--mono);font-size:18px;letter-spacing:.06em;position:relative}
+.cf-bot{display:flex;justify-content:space-between;font-size:11.5px;position:relative}
+.cf-bot b{display:block;font-size:13.5px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stripe{height:34px;background:#0B0B12;margin-top:20px}
+.cvvstrip{margin:16px 16px 0;background:#fff;color:#111;border-radius:4px;height:32px;display:flex;align-items:center;justify-content:flex-end;padding:0 12px;font-family:var(--mono);font-size:15px}
+.cface.b small{display:block;margin:10px 16px 0;opacity:.7;font-size:11.5px}
+
+/* UPI */
+.seg{display:flex;gap:6px;margin-bottom:16px;background:var(--surface-2);padding:4px;border-radius:14px}
+.seg button{flex:1;border:0;background:none;padding:8px;border-radius:10px;cursor:pointer;font-weight:600;color:var(--muted);min-height:40px;transition:background .2s,color .2s,box-shadow .2s}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.14)}
+.qrbox{display:flex;flex-direction:column;align-items:center;gap:10px;animation:rise .3s ease-out}
+.qrbox svg{width:176px;height:176px;background:#fff;border-radius:14px;padding:8px;border:1px solid var(--line)}
+.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%}
+.btnrow button{border:1px solid var(--line);border-radius:14px;background:var(--surface);padding:10px;min-height:50px;cursor:pointer;font-weight:600;transition:transform .12s}
+.btnrow button:active{transform:scale(.97)}
+.btnrow .good{border-color:var(--ok);color:var(--ok)} .btnrow .badb{border-color:var(--bad);color:var(--bad)}
+.timer{font-family:var(--mono);font-size:34px;margin:10px 0}
+.pulse{width:14px;height:14px;border-radius:50%;background:var(--accent);margin:0 auto 14px;animation:pulse 1.4s infinite}
+.note{border-radius:12px;padding:10px 12px;font-size:13px;margin:12px 0;text-align:left;background:var(--warn-bg);color:var(--warn);animation:rise .3s ease-out}
+
+/* Net banking */
+.banks{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.bank{border:1px solid var(--line);border-radius:16px;padding:12px;cursor:pointer;display:flex;align-items:center;gap:10px;min-height:62px;background:var(--surface);font-size:14px;transition:border-color .15s,background .15s,transform .12s;animation:rise .35s both}
+.bank:nth-child(2){animation-delay:.05s}.bank:nth-child(3){animation-delay:.1s}.bank:nth-child(4){animation-delay:.15s}
+.bank:active{transform:scale(.98)}
+.bank input{accent-color:var(--accent)}
+.bank:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.bankbar{margin:0 0 16px;padding:14px 16px;border-radius:14px;color:#fff;font-weight:700}
+.otp{width:100%;font-family:var(--mono);font-size:28px;letter-spacing:.5em;text-align:center;min-height:60px;border:1px solid var(--line);border-radius:14px;background:var(--surface);padding-left:.5em}
+.otp:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.otp[aria-invalid="true"]{border-color:var(--bad)}
+
+/* Processing + result */
+.ring{width:50px;height:50px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--accent);margin:0 auto 18px;animation:spin .8s linear infinite}
+.indet{height:4px;border-radius:4px;background:var(--line);overflow:hidden;max-width:220px;margin:16px auto 0}
+.indet i{display:block;height:100%;width:40%;background:var(--accent);border-radius:4px;animation:indet 1.1s ease-in-out infinite}
+.badgewrap{position:relative;width:84px;height:84px;margin:0 auto 14px}
+.badge{position:relative;width:84px;height:84px;border-radius:50%;display:grid;place-items:center;animation:badgePop .45s cubic-bezier(.2,1.4,.4,1) both}
+.badge svg{width:46px;height:46px}
+.badge.ok{background:var(--ok-bg);color:var(--ok)}
+.badge.bad{background:var(--bad-bg);color:var(--bad);animation:badgePop .4s cubic-bezier(.2,1.4,.4,1) both,shake .45s .4s}
+.badge .c{stroke-dasharray:145;stroke-dashoffset:145;animation:draw .5s .1s ease-out forwards}
+.badge .t{stroke-dasharray:40;stroke-dashoffset:40;animation:draw .35s .5s ease-out forwards}
+.badge .x{stroke-dasharray:30;stroke-dashoffset:30;animation:draw .25s .35s ease-out forwards}
+.badge .x2{animation-delay:.5s}
+.burst{position:absolute;inset:0;pointer-events:none}
+.burst i{position:absolute;left:50%;top:50%;width:7px;height:7px;margin:-3.5px;border-radius:50%;background:var(--c);animation:burst .85s .4s ease-out both;opacity:0}
+dl.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;text-align:left;font-size:13px;background:var(--surface-2);border-radius:14px;padding:14px;margin:16px 0}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;word-break:break-all}
+.res-in{animation:rise .4s .45s ease-out both}
+.redir{margin:14px 0 8px}
+.redir-bar{height:4px;border-radius:4px;background:var(--line);overflow:hidden;margin-bottom:6px}
+.redir-bar i{display:block;height:100%;background:var(--ok);transform-origin:left;animation:redirbar 4s linear forwards}
+
+/* ===== Cat celebration ===== */
+@keyframes catUp{from{transform:translateY(190px)}to{transform:translateY(0)}}
+@keyframes catDown{from{transform:translateY(0)}to{transform:translateY(190px)}}
+@keyframes hop{0%,100%{transform:translateY(0)}40%{transform:translateY(-12px)}}
+@keyframes wag{from{transform:rotate(-10deg)}to{transform:rotate(12deg)}}
+@keyframes armThrow{0%,22%{transform:rotate(0)}36%{transform:rotate(40deg)}42%{transform:rotate(-105deg)}62%{transform:rotate(-105deg)}90%,100%{transform:rotate(0)}}
+@keyframes hide{to{opacity:0}}
+@keyframes show{to{opacity:1}}
+@keyframes bubble{0%{opacity:0;transform:translateY(8px) scale(.9)}15%,80%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px)}}
+@keyframes toss{
+  0%{opacity:0;transform:translate(0,0) rotate(0) scale(.5);animation-timing-function:cubic-bezier(.2,.7,.3,1)}
+  8%{opacity:1}
+  45%{opacity:1;transform:translate(calc(var(--dx)*.62),calc(var(--up)*-1)) rotate(calc(var(--r)*.6)) scale(1);animation-timing-function:cubic-bezier(.5,0,.8,.5)}
+  85%{opacity:1}
+  100%{opacity:0;transform:translate(var(--dx),var(--fall)) rotate(var(--r)) scale(.95)}
+}
+.catstage{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:8}
+.cat{position:absolute;bottom:0;width:150px;transform:translateY(190px);animation:catUp .5s .05s cubic-bezier(.2,1.25,.4,1) forwards,catDown .45s 2.75s ease-in forwards}
+.cat-hop{animation:hop .45s .88s ease-out}
+.cat svg{display:block;width:100%;height:auto;overflow:visible}
+.cat .tail{transform-origin:116px 150px;animation:wag .55s ease-in-out infinite alternate}
+.cat .arm{transform-origin:106px 124px;animation:armThrow 2.2s ease-in-out both}
+.cat .bundle{animation:hide .01s .92s forwards}
+.cat .eyes-open{animation:hide .01s .88s forwards}
+.cat .eyes-happy{opacity:0;animation:show .01s .88s forwards}
+.bubble{position:absolute;bottom:182px;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:6px 12px;font-size:13px;font-weight:600;box-shadow:0 6px 18px -8px rgba(0,0,0,.3);opacity:0;white-space:nowrap;animation:bubble 1.7s 1.05s ease-out forwards}
+.note{position:absolute;left:var(--ox);bottom:var(--oy);width:44px;height:24px;margin:-12px 0 0 -22px;border-radius:4px;background:var(--c);border:2px solid rgba(0,0,0,.18);display:grid;place-items:center;box-shadow:0 2px 0 rgba(0,0,0,.12);opacity:0;animation:toss var(--t) var(--d) both}
+.note::before{content:"";position:absolute;inset:3px;border:1px dashed rgba(0,0,0,.25);border-radius:2px}
+.note b{font-size:13px;color:rgba(0,0,0,.55);font-family:var(--mono);position:relative}
+
+.toast{position:absolute;left:50%;bottom:86px;transform:translateX(-50%);background:var(--ink);color:var(--surface);padding:10px 16px;border-radius:99px;font-size:13.5px;z-index:100;animation:toastIn .25s ease-out;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+<div class="phone" id="app">
+  <header class="appbar">
+    <div class="wm"><span class="pk-mark" aria-hidden="true">P</span>PayKaro</div>
+  </header>
+
+  <main class="screens" id="screens">
+    <!-- ===== Pay ===== -->
+    <section class="screen" id="s-pay">
+      <div class="hero">
+        <div class="avatar" id="m-avatar" aria-hidden="true">B</div>
+        <div class="hero-name" id="m-title">Brahmaputra Tea Traders</div>
+        <div class="small muted" id="m-sub">Assam first flush sampler</div>
+      </div>
+
+      <div class="amtbox">
+        <div class="amtrow"><span>₹</span><input id="amount" data-testid="amount" inputmode="decimal" value="1250.00" autocomplete="off" aria-label="Amount" aria-invalid="false"></div>
+        <div class="err" id="amount-err"></div>
+        <div class="chips" id="quick"></div>
+      </div>
+
+      <div class="card" style="margin-top:18px">
+        <div class="field">
+          <div class="fl"><input id="payee" data-testid="payee-name" value="Brahmaputra Tea Traders" maxlength="40" autocomplete="off" placeholder=" " aria-invalid="false"><label for="payee">Payee company name</label></div>
+          <div class="err" id="payee-err"></div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <div class="fl"><input id="item" data-testid="payment-for" value="Assam first flush sampler" maxlength="50" autocomplete="off" placeholder=" "><label for="item">Payment for</label></div>
+        </div>
+      </div>
+
+      <div class="dock">
+        <button class="btn" id="open-checkout" data-testid="open-checkout">Pay ₹1,250.00</button>
+        <p class="small muted">Order ID <span class="mono" id="order-id" data-testid="order-id"></span></p>
+      </div>
+    </section>
+
+    <!-- ===== Activity ===== -->
+    <section class="screen" id="s-activity" hidden>
+      <div class="sec-head">
+        <h1>Activity</h1>
+        <div class="acts"><button id="copy-json" data-testid="copy-json">Copy JSON</button><button id="clear-hist" data-testid="clear-history">Clear</button></div>
+      </div>
+      <ul class="txlist" id="hist-list" data-testid="history-list"></ul>
+      <div class="empty" id="hist-empty">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+        <div>No payments yet.<br>Make a test payment and it will show up here.</div>
+      </div>
+    </section>
+
+    <!-- ===== Test data ===== -->
+    <section class="screen" id="s-test" hidden>
+      <h1>Test data</h1>
+      <p class="muted small" style="margin:0">Tap any row to copy it. Cards accept any future expiry and any CVV. The card OTP is <b class="mono">123456</b>.</p>
+      <h3>Cards</h3><div class="tlist" id="t-cards"></div>
+      <h3>UPI IDs</h3><div class="tlist" id="t-upi"></div>
+      <h3>Net banking and OTP</h3><div class="tlist" id="t-nb"></div>
+      <div style="height:20px"></div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" aria-selected="true" data-tab="pay" data-testid="tab-pay"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="3"/><circle cx="12" cy="12" r="2.6"/></svg></span>Pay</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="activity" data-testid="tab-activity"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v5l3 2"/><circle cx="12" cy="12" r="9"/></svg></span>Activity</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="test" data-testid="tab-testdata"><span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3"/></svg></span>Test data</button>
+  </nav>
+
+  <!-- ===== Checkout sheet ===== -->
+  <div class="layer" id="layer" hidden data-testid="checkout">
+    <div class="scrim"></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="co-title">
+      <div class="grab" aria-hidden="true"></div>
+      <div class="sh-head">
+        <button class="ibtn" id="co-back" aria-label="Go back" data-testid="checkout-back" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <h2 id="co-title">Contact details</h2>
+        <button class="ibtn" id="co-close" aria-label="Close checkout" data-testid="checkout-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="sh-sum">
+        <div class="avatar sm" id="co-avatar" aria-hidden="true">B</div>
+        <div class="sh-sum-main"><b id="co-name">Brahmaputra Tea Traders</b><span class="mono" id="co-order"></span></div>
+        <b id="co-amount" data-testid="checkout-amount"></b>
+      </div>
+
+      <div class="co-body" id="co-body">
+        <!-- Contact -->
+        <div class="view" id="v-contact">
+          <div class="field">
+            <div class="fl pre"><span class="pfx">+91</span><input id="phone" data-testid="contact-phone" type="tel" inputmode="numeric" maxlength="17" value="9876501234" autocomplete="off" placeholder=" "><label for="phone">Mobile number</label></div>
+            <div class="err" id="phone-err"></div>
+          </div>
+          <div class="field">
+            <div class="fl"><input id="email" data-testid="contact-email" type="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254" value="test.user@example.com" autocomplete="off" placeholder=" "><label for="email">Email</label></div>
+            <div class="err" id="email-err"></div>
+          </div>
+        </div>
+
+        <!-- Methods -->
+        <div class="view" id="v-methods" hidden>
+          <div class="contact-bar"><span><span class="mono" id="cb-phone"></span><br><span class="muted" id="cb-email"></span></span><button id="edit-contact" data-testid="edit-contact">Change</button></div>
+          <div class="methods">
+            <button class="method" data-go="v-upi" data-testid="method-upi"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 3L6 14h5l-1 7 7-11h-5l1-7z"/></svg></div><span><b>UPI</b><small>Pay with a UPI ID or a QR code</small></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+            <button class="method" data-go="v-card" data-testid="method-card"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5.5" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></div><span><b>Card</b><small>Credit and debit: Visa, Mastercard, RuPay, Amex</small></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+            <button class="method" data-go="v-nb" data-testid="method-netbanking"><div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 9.5L12 4l9 5.5M5 10v8M9.7 10v8M14.3 10v8M19 10v8M3 20h18"/></svg></div><span><b>Net banking</b><small>Sign in to your bank to pay</small></span><svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg></button>
+          </div>
+        </div>
+
+        <!-- Card -->
+        <div class="view" id="v-card" hidden>
+          <div class="cflip" id="cflip" aria-hidden="true">
+            <div class="cflip-in">
+              <div class="cface f">
+                <div class="cf-top"><span class="chipicon"></span><span id="cf-net">Card</span></div>
+                <div class="cf-num" id="cf-num">•••• •••• •••• ••••</div>
+                <div class="cf-bot"><div>Card holder<b id="cf-name">YOUR NAME</b></div><div style="text-align:right">Expires<b id="cf-exp">MM/YY</b></div></div>
+              </div>
+              <div class="cface b"><div class="stripe"></div><div class="cvvstrip" id="cf-cvv">•••</div><small>CVV</small></div>
+            </div>
+          </div>
+          <div class="field">
+            <div class="fl tag"><input id="cc-num" data-testid="card-number" inputmode="numeric" autocomplete="off" placeholder=" "><label for="cc-num">Card number</label><span class="nettag" id="nettag" data-testid="card-network"></span></div>
+            <div class="err" id="cc-num-err" data-testid="card-number-error"></div>
+          </div>
+          <div class="row">
+            <div class="field"><div class="fl"><input id="cc-exp" data-testid="card-expiry" inputmode="numeric" autocomplete="off" placeholder=" " maxlength="5"><label for="cc-exp">Expiry (MM/YY)</label></div><div class="err" id="cc-exp-err" data-testid="card-expiry-error"></div></div>
+            <div class="field"><div class="fl"><input id="cc-cvv" data-testid="card-cvv" type="password" inputmode="numeric" autocomplete="off" placeholder=" " maxlength="4"><label for="cc-cvv">CVV</label></div><div class="err" id="cc-cvv-err" data-testid="card-cvv-error"></div></div>
+          </div>
+          <div class="field"><div class="fl"><input id="cc-name" data-testid="card-name" autocomplete="off" placeholder=" "><label for="cc-name">Name on card</label></div><div class="err" id="cc-name-err" data-testid="card-name-error"></div></div>
+        </div>
+
+        <!-- OTP -->
+        <div class="view" id="v-otp" hidden data-testid="otp-view">
+          <p class="small muted" style="margin:0 0 14px">Your bank sent a 6-digit code to <span class="mono" id="otp-phone"></span> for <span id="otp-card"></span>. Test OTP is <b class="mono">123456</b>.</p>
+          <div class="field"><label class="st" for="otp">One-time password</label><input id="otp" class="otp" data-testid="otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-invalid="false"><div class="err" id="otp-err" data-testid="otp-error"></div></div>
+          <button class="btn-line" id="otp-cancel" data-testid="otp-cancel">Cancel payment</button>
+        </div>
+
+        <!-- UPI -->
+        <div class="view" id="v-upi" hidden>
+          <div class="seg"><button aria-pressed="true" id="upi-mode-id" data-testid="upi-mode-id">UPI ID</button><button aria-pressed="false" id="upi-mode-qr" data-testid="upi-mode-qr">QR code</button></div>
+          <div id="upi-id-box">
+            <div class="field"><div class="fl"><input id="vpa" data-testid="upi-id" autocomplete="off" placeholder=" " autocapitalize="none" spellcheck="false"><label for="vpa">UPI ID (like success@paykaro)</label></div><div class="err" id="vpa-err" data-testid="upi-id-error"></div></div>
+            <p class="small muted" style="margin:0">A payment request goes to this UPI ID. Approve it in your UPI app.</p>
+          </div>
+          <div id="upi-qr-box" hidden>
+            <div class="qrbox">
+              <div id="qr" data-testid="upi-qr"></div>
+              <p class="small muted" style="margin:0;text-align:center">Test QR: it can’t be scanned. Simulate the result instead.</p>
+              <div class="btnrow"><button class="good" id="qr-ok" data-testid="qr-simulate-success">Simulate payment</button><button class="badb" id="qr-fail" data-testid="qr-simulate-failure">Simulate failure</button></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- UPI waiting -->
+        <div class="view center" id="v-upiwait" hidden data-testid="upi-waiting">
+          <div class="pulse" aria-hidden="true"></div>
+          <h2>Approve the payment in your UPI app</h2>
+          <p class="small muted" style="margin:0">Request sent to <b class="mono" id="wait-vpa"></b></p>
+          <div class="timer" id="wait-timer" data-testid="upi-timer">0:20</div>
+          <div class="note" id="wait-note" hidden>The bank is taking longer than usual. This page updates on its own.</div>
+          <button class="btn-line" id="wait-cancel" data-testid="upi-cancel">Cancel payment</button>
+        </div>
+
+        <!-- Net banking -->
+        <div class="view" id="v-nb" hidden>
+          <div class="banks" id="banks" role="radiogroup" aria-label="Choose your bank"></div>
+          <div class="err" id="nb-err" data-testid="netbanking-error" style="margin-top:10px"></div>
+        </div>
+
+        <!-- Bank page -->
+        <div class="view" id="v-bank" hidden data-testid="bank-page">
+          <div class="bankbar" id="bank-bar"></div>
+          <div id="bank-login">
+            <p class="small muted" style="margin:0 0 14px">Simulated bank page. Use <span class="mono">testuser</span> / <span class="mono">test123</span>.</p>
+            <div class="field"><div class="fl"><input id="nb-user" data-testid="bank-user" autocomplete="off" placeholder=" "><label for="nb-user">Customer ID</label></div></div>
+            <div class="field"><div class="fl"><input id="nb-pass" data-testid="bank-password" type="password" autocomplete="off" placeholder=" "><label for="nb-pass">Password</label></div><div class="err" id="nb-pass-err" data-testid="bank-login-error"></div></div>
+            <button class="btn" id="nb-login" data-testid="bank-login">Sign in</button>
+            <button class="btn-line" id="nb-cancel" data-testid="bank-cancel">Cancel and return to merchant</button>
+          </div>
+          <div id="bank-confirm" hidden>
+            <h2>Confirm payment</h2>
+            <p class="small muted" style="margin:0">Pay <b class="mono" id="bank-amt"></b> to <span id="bank-payee">Brahmaputra Tea Traders</span> from account ending 4021?</p>
+            <div class="btnrow" style="margin-top:16px"><button class="good" id="nb-authorize" data-testid="bank-authorize">Authorize</button><button class="badb" id="nb-reject" data-testid="bank-reject">Reject</button></div>
+          </div>
+        </div>
+
+        <!-- Processing -->
+        <div class="view center" id="v-processing" hidden data-testid="processing">
+          <div class="ring" aria-hidden="true"></div>
+          <h2>Processing payment</h2>
+          <p class="small muted" id="proc-sub" style="margin:0">Don’t close this window.</p>
+          <div class="indet" aria-hidden="true"><i></i></div>
+        </div>
+
+        <!-- Result -->
+        <div class="view center" id="v-result" hidden data-testid="result" style="padding-top:26px">
+          <div class="badgewrap"><div class="burst" id="burst"></div><div class="badge" id="res-badge"></div></div>
+          <h2 id="res-title" data-testid="result-title" style="margin-bottom:2px"></h2>
+          <div class="mono" id="res-amt" style="font-size:26px"></div>
+          <div class="res-in">
+            <dl class="kv" id="res-kv"></dl>
+            <div class="redir" id="redir" hidden><div class="redir-bar"><i></i></div><span class="small muted" id="redir-txt"></span></div>
+            <button class="btn" id="res-primary" data-testid="result-primary"></button>
+            <button class="btn-line" id="res-secondary" data-testid="result-secondary" hidden>Choose another payment option</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="co-foot" id="co-foot"><button class="btn" id="co-cta" data-testid="checkout-cta">Continue</button></div>
+      <div class="catstage" id="catstage" hidden aria-hidden="true"></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden role="status"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const $ = s => document.querySelector(s);
+  const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const COARSE = matchMedia("(pointer: coarse)").matches;
+  let MERCHANT = "Brahmaputra Tea Traders", ITEM = "Assam first flush sampler";
+
+  // ---------- Test data ----------
+  const OUTCOMES = {
+    success:{status:"success"},
+    declined:{status:"failed",code:"CARD_DECLINED",reason:"The issuing bank declined this card."},
+    insufficient_funds:{status:"failed",code:"INSUFFICIENT_FUNDS",reason:"The account doesn’t have enough balance."},
+    expired_card:{status:"failed",code:"EXPIRED_CARD",reason:"The bank reports this card has expired."},
+    incorrect_cvv:{status:"failed",code:"INCORRECT_CVV",reason:"The CVV doesn’t match the card."},
+    otp_failed:{status:"failed",code:"AUTHENTICATION_FAILED",reason:"Too many incorrect OTP attempts."},
+    cancelled:{status:"failed",code:"PAYMENT_CANCELLED",reason:"The payment was cancelled before it completed."},
+    upi_declined:{status:"failed",code:"UPI_DECLINED",reason:"The request was declined in the UPI app."},
+    upi_expired:{status:"failed",code:"UPI_REQUEST_EXPIRED",reason:"The request wasn’t approved in time."},
+    nb_rejected:{status:"failed",code:"BANK_REJECTED",reason:"The payment was rejected on the bank page."}
+  };
+  const TEST_CARDS = {
+    "4111111111111111":{type:"Credit",outcome:"success"},
+    "5555555555554444":{type:"Credit",outcome:"success"},
+    "378282246310005":{type:"Credit",outcome:"success"},
+    "6080000000000026":{type:"Credit",outcome:"success"},
+    "4000056655665556":{type:"Debit",outcome:"success"},
+    "5200828282828210":{type:"Debit",outcome:"success"},
+    "6522000000000014":{type:"Debit",outcome:"success"},
+    "4000000000000002":{type:"Credit",outcome:"declined"},
+    "4000000000009995":{type:"Debit",outcome:"insufficient_funds"},
+    "4000000000000069":{type:"Credit",outcome:"expired_card"},
+    "4000000000000127":{type:"Credit",outcome:"incorrect_cvv"}
+  };
+  const OUT_CHIP = {success:["ok","Success"],declined:["bad","Declined"],insufficient_funds:["bad","Insufficient funds"],expired_card:["bad","Expired card"],incorrect_cvv:["bad","Wrong CVV"]};
+  const TEST_VPAS = {
+    "success@paykaro":["ok","Success","Approves in 3 s"],
+    "failure@paykaro":["bad","Declined","Declines in 3 s"],
+    "pending@paykaro":["warn","Pending","Slow bank, then succeeds"],
+    "timeout@paykaro":["bad","Expires","Never approved"]
+  };
+  const BANKS = [
+    {id:"northwind",name:"Northwind Bank",color:"#2B5D4A"},
+    {id:"meridian",name:"Meridian Co-op Bank",color:"#7A3B2E"},
+    {id:"harbor",name:"Harbor National",color:"#1F4E79"},
+    {id:"saffron",name:"Saffron Bank",color:"#9A5B00"}
+  ];
+
+  // ---------- Helpers ----------
+  let amount=1250, orderId=newOrderId(), timers=[], stack=[], current="v-contact", closeT=null;
+  let pendingCard=null, otpAttempts=0, selectedBank=null, upiMode="id", lastMethodView="v-methods", activeDetails=null, opener=null;
+  function rand(n){const c="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";const a=new Uint32Array(n);crypto.getRandomValues(a);return [...a].map(v=>c[v%c.length]).join("");}
+  function newOrderId(){return "order_"+rand(12);}
+  function fmt(n){return "₹"+Number(n).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});}
+  function digits(s){return (s||"").replace(/\D/g,"");}
+  function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+  function clearTimers(){timers.forEach(t=>{clearTimeout(t);clearInterval(t)});timers=[];}
+  function toast(m){const t=$("#toast");t.hidden=true;void t.offsetWidth;t.textContent=m;t.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>t.hidden=true,2200);}
+  function setErr(id,msg){
+    const e=$("#"+id+"-err"), had=e&&e.textContent;
+    if(e) e.textContent=msg||"";
+    const i=$("#"+id);
+    if(i){
+      i.setAttribute("aria-invalid",msg?"true":"false");
+      if(msg&&!had){const w=i.closest(".fl,.amtrow")||i;w.classList.remove("shake");void w.offsetWidth;w.classList.add("shake");}
+    }
+  }
+  async function copyText(txt,msg){
+    try{await navigator.clipboard.writeText(txt);toast(msg);}
+    catch(e){const ta=document.createElement("textarea");ta.value=txt;ta.style.position="fixed";ta.style.opacity="0";document.body.appendChild(ta);ta.select();try{document.execCommand("copy");toast(msg);}catch(_){toast("Copy isn’t available in this browser");}ta.remove();}
+  }
+  const AV=["#0A7F57","#2F5FD0","#B4540A","#8A3FB5","#C2357A","#0B7A8A"];
+  function setAvatar(el,name){let h=0;for(const c of name)h=(h*31+c.charCodeAt(0))>>>0;el.textContent=(name.trim().charAt(0)||"?").toUpperCase();el.style.background=AV[h%AV.length];}
+  function countUp(el,to){
+    el.dataset.value=fmt(to);
+    if(REDUCED){el.textContent=fmt(to);return;}
+    const t0=performance.now(), dur=650;
+    (function step(t){const p=Math.min(1,(t-t0)/dur),e=1-Math.pow(1-p,3);el.textContent=p<1?fmt(to*e):fmt(to);if(p<1)requestAnimationFrame(step);})(t0);
+  }
+
+  // ---------- Tabs ----------
+  const tabs=[...document.querySelectorAll(".tab")], SCREENS={pay:"s-pay",activity:"s-activity",test:"s-test"};
+  function selectTab(t){
+    tabs.forEach(b=>{const on=b.dataset.tab===t;b.setAttribute("aria-selected",on);b.tabIndex=on?0:-1;});
+    Object.entries(SCREENS).forEach(([k,id])=>{const el=$("#"+id);el.hidden=k!==t;if(k===t){el.classList.remove("in");void el.offsetWidth;el.classList.add("in");}});
+    $("#screens").scrollTop=0; document.body.dataset.tab=t;
+  }
+  tabs.forEach((b,i)=>{
+    b.addEventListener("click",()=>selectTab(b.dataset.tab));
+    b.addEventListener("keydown",e=>{
+      if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft") return;
+      const n=tabs[(i+(e.key==="ArrowRight"?1:tabs.length-1))%tabs.length]; n.focus(); selectTab(n.dataset.tab);
+    });
+  });
+
+  // ---------- Pay screen ----------
+  $("#order-id").textContent=orderId;
+  function refreshHero(){
+    const name=$("#payee").value.trim()||"Payee company";
+    $("#m-title").textContent=name; setAvatar($("#m-avatar"),name);
+    $("#m-sub").textContent=$("#item").value.trim()||"Payment";
+  }
+  $("#payee").addEventListener("input",()=>{setErr("payee","");refreshHero();});
+  $("#item").addEventListener("input",refreshHero);
+  function refreshAmount(){
+    const raw=$("#amount").value.replace(/,/g,""), v=Number(raw); let msg="";
+    if(!raw||isNaN(v)) msg="Enter an amount, like 499 or 1250.50.";
+    else if(v<1) msg="The minimum amount is ₹1.";
+    else if(v>500000) msg="The maximum amount in test mode is ₹5,00,000.";
+    else if(!/^\d+(\.\d{1,2})?$/.test(raw)) msg="Use at most two decimal places.";
+    setErr("amount",msg);
+    if(!msg) amount=Math.round(v*100)/100;
+    $("#open-checkout").textContent=msg?"Enter a valid amount":"Pay "+fmt(amount); $("#open-checkout").disabled=!!msg;
+    return !msg;
+  }
+  $("#amount").addEventListener("input",refreshAmount);
+  [100,500,1250,5000].forEach(v=>$("#quick").insertAdjacentHTML("beforeend",`<button type="button" data-amt="${v}">₹${v.toLocaleString("en-IN")}</button>`));
+  $("#quick").addEventListener("click",e=>{const b=e.target.closest("[data-amt]");if(!b)return;$("#amount").value=Number(b.dataset.amt).toFixed(2);refreshAmount();});
+
+  // ---------- Test data screen ----------
+  const COPY_ICON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>';
+  function trow(copy,main,sub,cls,txt){return `<button class="trow" data-copy="${esc(copy)}" data-label="${esc(main)}"><span><code class="mono">${esc(main)}</code><small>${esc(sub)}</small></span>${txt?`<span class="chip ${cls}">${esc(txt)}</span>`:COPY_ICON}</button>`;}
+  $("#t-cards").innerHTML=Object.entries(TEST_CARDS).map(([n,c])=>{const [cls,txt]=OUT_CHIP[c.outcome];return trow(n,group(n),network(n)+" "+c.type.toLowerCase(),cls,txt);}).join("");
+  $("#t-upi").innerHTML=Object.entries(TEST_VPAS).map(([v,[cls,txt,sub]])=>trow(v,v,sub,cls,txt)).join("");
+  $("#t-nb").innerHTML=trow("testuser","testuser","Net banking customer ID")+trow("test123","test123","Net banking password")+trow("123456","123456","Card OTP, works for every test card");
+  $("#s-test").addEventListener("click",e=>{const b=e.target.closest("[data-copy]");if(b)copyText(b.dataset.copy,"Copied "+b.dataset.label);});
+
+  // ---------- Checkout open / close ----------
+  $("#open-checkout").addEventListener("click",()=>{
+    if(!refreshAmount()) return;
+    if(!$("#payee").value.trim()){setErr("payee","Enter the payee company name.");return;}
+    clearTimeout(closeT); opener=document.activeElement;
+    MERCHANT=$("#payee").value.trim(); ITEM=$("#item").value.trim()||"Payment";
+    $("#co-name").textContent=MERCHANT; setAvatar($("#co-avatar"),MERCHANT); $("#bank-payee").textContent=MERCHANT;
+    $("#co-order").textContent=orderId;
+    const l=$("#layer"); l.classList.remove("out"); l.hidden=false;
+    resetCheckout(); countUp($("#co-amount"),amount);
+  });
+  function closeCheckout(){
+    clearTimers();
+    const l=$("#layer"); l.classList.add("out");
+    closeT=setTimeout(()=>{l.hidden=true;l.classList.remove("out");if(opener)opener.focus();},REDUCED?0:270);
+  }
+  $("#co-close").addEventListener("click",()=>{
+    if(["v-otp","v-upiwait","v-bank"].includes(current)&&activeDetails){finish(activeDetails,"cancelled");return;}
+    if(current==="v-processing") return;
+    closeCheckout();
+  });
+  document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&!$("#layer").hidden&&!$("#layer").classList.contains("out")) $("#co-close").click(); });
+
+  function resetCheckout(){
+    clearTimers(); stack=[]; activeDetails=null; pendingCard=null; selectedBank=null; stopCat();
+    ["cc-num","cc-exp","cc-cvv","cc-name","vpa","otp","nb-user","nb-pass"].forEach(id=>{$("#"+id).value="";setErr(id,"");});
+    setErr("phone",""); setErr("email","");
+    document.querySelectorAll("#banks input").forEach(i=>i.checked=false);
+    $("#nb-err").textContent="";
+    updateCard(); setUpiMode("id"); go("v-contact","replace");
+  }
+
+  // ---------- Navigation ----------
+  const TITLES={"v-contact":"Contact details","v-methods":"Payment options","v-card":"Pay with card","v-upi":"Pay with UPI","v-nb":"Choose your bank","v-otp":"Verify with OTP","v-upiwait":"Waiting for approval","v-bank":"Bank sign in","v-processing":"Processing","v-result":"Payment status"};
+  const NOBACK=new Set(["v-contact","v-methods","v-otp","v-upiwait","v-bank","v-processing","v-result"]);
+  const CTA={
+    "v-contact":()=>"Continue",
+    "v-card":()=>"Pay "+fmt(amount),
+    "v-otp":()=>"Verify and pay",
+    "v-upi":()=>upiMode==="id"?"Pay "+fmt(amount):null,
+    "v-nb":()=>"Pay "+fmt(amount)
+  };
+  function go(view,mode="push"){
+    if(mode==="push"&&current!==view) stack.push(current);
+    document.querySelectorAll(".view").forEach(v=>{v.hidden=v.id!==view;v.classList.remove("in-fwd","in-back");});
+    const el=$("#"+view); el.classList.add(mode==="back"?"in-back":"in-fwd");
+    current=view; document.body.dataset.view=view;
+    $("#co-title").textContent=TITLES[view]||"";
+    $("#co-back").hidden=!(stack.length>0&&!NOBACK.has(view));
+    const label=CTA[view]&&CTA[view]();
+    $("#co-foot").hidden=!label; if(label) $("#co-cta").textContent=label;
+    $("#co-body").scrollTop=0;
+    if(!COARSE&&view!=="v-result"&&view!=="v-processing"){
+      const f=el.querySelector(view==="v-methods"?".method":"input:not([type=radio]),button.good");
+      if(f) setTimeout(()=>f.focus({preventScroll:true}),60);
+    }
+  }
+  $("#co-back").addEventListener("click",()=>go(stack.pop()||"v-methods","back"));
+  document.querySelectorAll("[data-go]").forEach(b=>b.addEventListener("click",()=>{lastMethodView=b.dataset.go;go(b.dataset.go);}));
+  $("#edit-contact").addEventListener("click",()=>{stack=[];go("v-contact","back");});
+  $("#co-cta").addEventListener("click",()=>{({"v-contact":submitContact,"v-card":submitCard,"v-otp":submitOtp,"v-upi":submitUpi,"v-nb":submitNb})[current]?.();});
+  document.addEventListener("keydown",e=>{
+    if(e.key!=="Enter"||$("#layer").hidden||$("#co-foot").hidden) return;
+    if(e.target.matches("input")){e.preventDefault();$("#co-cta").click();}
+  });
+
+  // ---------- Contact ----------
+  const EMAIL_TYPOS={"gmial.com":"gmail.com","gmai.com":"gmail.com","gmail.con":"gmail.com","gmail.co":"gmail.com","gamil.com":"gmail.com","gnail.com":"gmail.com","yaho.com":"yahoo.com","yahooo.com":"yahoo.com","yahoo.con":"yahoo.com","hotmial.com":"hotmail.com","hotmail.con":"hotmail.com","outlok.com":"outlook.com","outlook.con":"outlook.com","iclod.com":"icloud.com"};
+  // Accepts pasted formats like +91 98765 43210 or 098765 43210 and keeps the 10-digit number.
+  function normPhone(raw){let d=digits(raw);if(d.length>10&&d.startsWith("91"))d=d.slice(2);else if(d.length===11&&d[0]==="0")d=d.slice(1);return d.slice(0,10);}
+  function phoneError(v){
+    const d=digits(v);
+    if(!d) return "Enter your mobile number.";
+    if(!/^[6-9]/.test(d)) return "Indian mobile numbers start with 6, 7, 8 or 9.";
+    if(d.length<10) return `Enter all 10 digits. You’ve entered ${d.length}.`;
+    if(/^(\d)\1{9}$/.test(d)||["1234567890","9876543210"].includes(d)) return "This number looks made up. Enter a different one.";
+    return "";
+  }
+  function emailError(v){
+    const e=v.trim();
+    if(!e) return "Enter your email address.";
+    if(/\s/.test(e)) return "Remove the spaces from the email address.";
+    if(!e.includes("@")) return "Add an @, like name@example.com.";
+    if((e.match(/@/g)||[]).length>1) return "Use only one @ in the email address.";
+    const [local,domain]=e.split("@");
+    if(!local) return "Add the part before the @, like name@example.com.";
+    if(!domain) return "Add the domain after the @, like name@example.com.";
+    if(e.length>254||local.length>64) return "This email address is too long.";
+    if(/^\.|\.$|\.\./.test(local)||!/^[A-Za-z0-9._%+-]+$/.test(local)) return "The part before the @ has characters that aren’t allowed.";
+    if(!domain.includes(".")) return "The domain needs a dot, like example.com.";
+    const labels=domain.split(".");
+    if(labels.some(l=>!l||l.length>63||!/^[A-Za-z0-9-]+$/.test(l)||l.startsWith("-")||l.endsWith("-"))) return "The domain after the @ isn’t valid.";
+    if(!/^[A-Za-z]{2,}$/.test(labels[labels.length-1])) return "The ending of the domain, like .com, isn’t valid.";
+    const fix=EMAIL_TYPOS[domain.toLowerCase()];
+    if(fix) return `Did you mean ${local}@${fix}?`;
+    return "";
+  }
+  $("#phone").addEventListener("input",e=>{
+    const d=normPhone(e.target.value); e.target.value=d;
+    setErr("phone",d&&/^[0-5]/.test(d)?"Indian mobile numbers start with 6, 7, 8 or 9.":"");
+  });
+  $("#phone").addEventListener("blur",e=>{if(e.target.value){const m=phoneError(e.target.value);if(m)setErr("phone",m);}});
+  $("#email").addEventListener("input",()=>setErr("email",""));
+  $("#email").addEventListener("blur",e=>{
+    const v=e.target.value.trim().toLowerCase(); e.target.value=v;
+    if(v){const m=emailError(v);if(m)setErr("email",m);}
+  });
+  function submitContact(){
+    let ok=true;
+    const pm=phoneError($("#phone").value);if(pm){setErr("phone",pm);ok=false;}
+    const em=emailError($("#email").value);if(em){setErr("email",em);ok=false;}
+    if(!ok) return;
+    const p=$("#phone").value;
+    $("#cb-phone").textContent="+91 "+p.slice(0,5)+" "+p.slice(5); $("#cb-email").textContent=$("#email").value.trim();
+    stack=[]; go("v-methods","replace");
+  }
+
+  // ---------- Card ----------
+  function network(d){
+    if(/^4/.test(d)) return "Visa";
+    if(/^(5[1-5]|2(2[2-9]|[3-6]\d|7[01]|720))/.test(d)) return "Mastercard";
+    if(/^3[47]/.test(d)) return "Amex";
+    if(/^(60|65|81|82|508)/.test(d)) return "RuPay";
+    return null;
+  }
+  function group(d){return network(d)==="Amex"?[d.slice(0,4),d.slice(4,10),d.slice(10,15)].filter(Boolean).join(" "):d.replace(/(.{4})/g,"$1 ").trim();}
+  function luhn(n){let s=0,dbl=false;for(let i=n.length-1;i>=0;i--){let x=+n[i];if(dbl){x*=2;if(x>9)x-=9}s+=x;dbl=!dbl}return s%10===0;}
+  function updateCard(){
+    const d=digits($("#cc-num").value), net=network(d), t=TEST_CARDS[d], len=net==="Amex"?15:16;
+    $("#cflip").dataset.net=net||"";
+    $("#cf-net").textContent=net||"Card";
+    $("#cf-num").textContent=group((d+"•".repeat(Math.max(0,len-d.length))).slice(0,len));
+    $("#cf-name").textContent=$("#cc-name").value.trim()||"YOUR NAME";
+    $("#cf-exp").textContent=$("#cc-exp").value||"MM/YY";
+    const cl=digits($("#cc-cvv").value).length; $("#cf-cvv").textContent="•".repeat(Math.max(cl,net==="Amex"?4:3));
+    $("#nettag").textContent=net?net+(t?" "+t.type.toLowerCase():""):"";
+  }
+  $("#cc-num").addEventListener("input",e=>{const raw=digits(e.target.value);const d=raw.slice(0,network(raw)==="Amex"?15:16);e.target.value=group(d);setErr("cc-num","");updateCard();});
+  $("#cc-exp").addEventListener("input",e=>{let d=digits(e.target.value).slice(0,4);if(d.length===1&&+d>1)d="0"+d;e.target.value=d.length>2?d.slice(0,2)+"/"+d.slice(2):d;setErr("cc-exp","");updateCard();});
+  $("#cc-cvv").addEventListener("input",e=>{e.target.value=digits(e.target.value).slice(0,4);setErr("cc-cvv","");updateCard();});
+  $("#cc-cvv").addEventListener("focus",()=>$("#cflip").classList.add("back"));
+  $("#cc-cvv").addEventListener("blur",()=>$("#cflip").classList.remove("back"));
+  $("#cc-name").addEventListener("input",()=>{setErr("cc-name","");updateCard();});
+
+  function submitCard(){
+    const d=digits($("#cc-num").value), net=network(d); let ok=true;
+    if(!d){setErr("cc-num","Enter the card number.");ok=false;}
+    else if(!net){setErr("cc-num","This card network isn’t supported. Use Visa, Mastercard, RuPay or Amex.");ok=false;}
+    else if(d.length!==(net==="Amex"?15:16)){setErr("cc-num","The card number is incomplete.");ok=false;}
+    else if(!luhn(d)){setErr("cc-num","This card number isn’t valid. Check the digits.");ok=false;}
+    else if(!TEST_CARDS[d]){setErr("cc-num","Only test cards work here. Find one under the Test data tab.");ok=false;}
+    const m=$("#cc-exp").value.match(/^(\d{2})\/(\d{2})$/);
+    if(!m){setErr("cc-exp","Enter expiry as MM/YY.");ok=false;}
+    else{const mm=+m[1],yy=2000+ +m[2],now=new Date();
+      if(mm<1||mm>12){setErr("cc-exp","Month must be 01–12.");ok=false;}
+      else if(new Date(yy,mm,1)<=new Date(now.getFullYear(),now.getMonth(),1)){setErr("cc-exp","This expiry date has passed.");ok=false;}}
+    const cl=net==="Amex"?4:3;
+    if(digits($("#cc-cvv").value).length!==cl){setErr("cc-cvv",`Enter the ${cl}-digit CVV.`);ok=false;}
+    if($("#cc-name").value.trim().length<2){setErr("cc-name","Enter the name on the card.");ok=false;}
+    if(!ok) return;
+    pendingCard={network:net,type:TEST_CARDS[d].type,last4:d.slice(-4),outcome:TEST_CARDS[d].outcome};
+    activeDetails={method:"card",label:`${net} ${pendingCard.type.toLowerCase()} •••• ${pendingCard.last4}`,card:{network:net,type:pendingCard.type,last4:pendingCard.last4}};
+    otpAttempts=0; $("#otp").value=""; setErr("otp","");
+    $("#otp-phone").textContent="+91 ••••••"+$("#phone").value.slice(-4);
+    $("#otp-card").textContent=activeDetails.label;
+    go("v-otp");
+  }
+  $("#otp").addEventListener("input",e=>{e.target.value=digits(e.target.value).slice(0,6);setErr("otp","");});
+  function submitOtp(){
+    const v=$("#otp").value;
+    if(v.length!==6){setErr("otp","Enter all 6 digits.");return;}
+    if(v!=="123456"){
+      otpAttempts++;
+      if(otpAttempts>=3){finish(activeDetails,"otp_failed");return;}
+      const left=3-otpAttempts; $("#otp").value=""; setErr("otp",`Incorrect OTP. ${left} ${left===1?"attempt":"attempts"} left.`); return;
+    }
+    process(activeDetails,pendingCard.outcome,"Confirming with your bank");
+  }
+  $("#otp-cancel").addEventListener("click",()=>finish(activeDetails,"cancelled"));
+
+  // ---------- UPI ----------
+  function setUpiMode(m){
+    upiMode=m;
+    $("#upi-mode-id").setAttribute("aria-pressed",m==="id"); $("#upi-mode-qr").setAttribute("aria-pressed",m==="qr");
+    $("#upi-id-box").hidden=m!=="id"; $("#upi-qr-box").hidden=m!=="qr";
+    if(m==="qr") drawQR();
+    if(current==="v-upi"){const l=CTA["v-upi"]();$("#co-foot").hidden=!l;if(l)$("#co-cta").textContent=l;}
+  }
+  $("#upi-mode-id").addEventListener("click",()=>setUpiMode("id"));
+  $("#upi-mode-qr").addEventListener("click",()=>setUpiMode("qr"));
+  $("#vpa").addEventListener("input",()=>setErr("vpa",""));
+  function submitUpi(){
+    const vpa=$("#vpa").value.trim().toLowerCase();
+    if(!vpa){setErr("vpa","Enter a UPI ID, like success@paykaro.");return;}
+    if(!/^[a-z0-9._-]{2,}@[a-z]{2,}$/.test(vpa)){setErr("vpa","That isn’t a valid UPI ID. It looks like name@bank.");return;}
+    if(!TEST_VPAS[vpa]){setErr("vpa","This UPI ID isn’t registered in test mode. Find one under the Test data tab.");return;}
+    activeDetails={method:"upi",label:"UPI "+vpa,upi:{vpa,flow:"collect"}};
+    clearTimers(); go("v-upiwait");
+    $("#wait-vpa").textContent=vpa; $("#wait-note").hidden=true;
+    let left=20; $("#wait-timer").textContent="0:20";
+    const d=activeDetails;
+    timers.push(setInterval(()=>{left--;$("#wait-timer").textContent="0:"+String(Math.max(0,left)).padStart(2,"0");if(left<=0)finish(d,"upi_expired");},1000));
+    const after=(ms,fn)=>timers.push(setTimeout(fn,ms));
+    if(vpa==="success@paykaro") after(3000,()=>process(d,"success","Payment approved, confirming"));
+    if(vpa==="failure@paykaro") after(3000,()=>finish(d,"upi_declined"));
+    if(vpa==="pending@paykaro"){after(4000,()=>$("#wait-note").hidden=false);after(9000,()=>process(d,"success","Payment approved, confirming"));}
+  }
+  $("#wait-cancel").addEventListener("click",()=>finish(activeDetails,"cancelled"));
+  function drawQR(){
+    let seed=0; for(const ch of orderId+amount) seed=(seed*31+ch.charCodeAt(0))>>>0;
+    const rnd=()=>(seed=(seed*1664525+1013904223)>>>0)/4294967296, N=25;
+    const fz=(x,y)=>(x<7&&y<7)||(x>=N-7&&y<7)||(x<7&&y>=N-7); let cells="";
+    for(let y=0;y<N;y++)for(let x=0;x<N;x++) if(!fz(x,y)&&rnd()>.5) cells+=`<rect x="${x}" y="${y}" width="1" height="1"/>`;
+    const f=(x,y)=>`<rect x="${x}" y="${y}" width="7" height="7"/><rect x="${x+1}" y="${y+1}" width="5" height="5" fill="#fff"/><rect x="${x+2}" y="${y+2}" width="3" height="3"/>`;
+    $("#qr").innerHTML=`<svg viewBox="0 0 ${N} ${N}" fill="#111" shape-rendering="crispEdges" role="img" aria-label="Test QR code">${cells}${f(0,0)}${f(N-7,0)}${f(0,N-7)}</svg>`;
+  }
+  const qrDetails=()=>({method:"upi",label:"UPI QR",upi:{flow:"qr"}});
+  $("#qr-ok").addEventListener("click",()=>process(qrDetails(),"success","Payment received, confirming"));
+  $("#qr-fail").addEventListener("click",()=>finish(qrDetails(),"upi_declined"));
+
+  // ---------- Net banking ----------
+  BANKS.forEach(b=>$("#banks").insertAdjacentHTML("beforeend",`<label class="bank"><input type="radio" name="bank" value="${b.id}" data-testid="bank-${b.id}"><span>${b.name}</span></label>`));
+  $("#banks").addEventListener("change",e=>{selectedBank=BANKS.find(b=>b.id===e.target.value);$("#nb-err").textContent="";});
+  function submitNb(){
+    if(!selectedBank){$("#nb-err").textContent="Choose a bank to continue.";return;}
+    activeDetails={method:"netbanking",label:"Net banking, "+selectedBank.name,netbanking:{bank:selectedBank.name}};
+    $("#bank-bar").textContent=selectedBank.name; $("#bank-bar").style.background=selectedBank.color;
+    $("#bank-login").hidden=false; $("#bank-confirm").hidden=true; $("#bank-amt").textContent=fmt(amount);
+    $("#nb-user").value=""; $("#nb-pass").value=""; setErr("nb-pass","");
+    go("v-bank");
+  }
+  $("#nb-login").addEventListener("click",()=>{
+    if($("#nb-user").value.trim()!=="testuser"||$("#nb-pass").value!=="test123"){setErr("nb-pass","Incorrect customer ID or password.");return;}
+    $("#bank-login").hidden=true; $("#bank-confirm").hidden=false; $("#nb-authorize").focus();
+  });
+  $("#nb-pass").addEventListener("keydown",e=>{if(e.key==="Enter"){e.stopPropagation();$("#nb-login").click();}});
+  $("#nb-cancel").addEventListener("click",()=>finish(activeDetails,"cancelled"));
+  $("#nb-authorize").addEventListener("click",()=>process(activeDetails,"success","Returning from your bank"));
+  $("#nb-reject").addEventListener("click",()=>finish(activeDetails,"nb_rejected"));
+
+  // ---------- Outcome ----------
+  function process(details,outcome,sub){
+    clearTimers(); go("v-processing","replace");
+    $("#proc-sub").textContent=(sub||"Processing")+". Don’t close this window.";
+    timers.push(setTimeout(()=>{$("#proc-sub").textContent="Verifying the payment. Almost done.";},900));
+    timers.push(setTimeout(()=>finish(details,outcome),1900));
+  }
+  function finish(details,key){
+    clearTimers();
+    const o=OUTCOMES[key];
+    const t={
+      id:"pay_"+rand(14), order_id:orderId, amount, currency:"INR", payee:MERCHANT, description:ITEM,
+      status:o.status, method:details.method, method_label:details.label,
+      error_code:o.code||null, error_reason:o.reason||null,
+      contact:{phone:"+91"+$("#phone").value, email:$("#email").value.trim()},
+      created_at:new Date().toISOString(),
+      ...(details.card?{card:details.card}:{}),...(details.upi?{upi:details.upi}:{}),...(details.netbanking?{netbanking:details.netbanking}:{})
+    };
+    activeDetails=null; save(t); showResult(t);
+    document.body.dataset.lastStatus=t.status;
+    window.dispatchEvent(new CustomEvent("paykaro:result",{detail:t}));
+  }
+  var catT=null;
+  const CAT_SVG=`<svg viewBox="0 0 160 180" aria-hidden="true"><path class="tail" d="M116 156 C150 158 158 118 140 102" fill="none" stroke="#F0A04B" stroke-width="13" stroke-linecap="round"/><ellipse cx="80" cy="142" rx="42" ry="34" fill="#F0A04B"/><ellipse cx="80" cy="150" rx="25" ry="22" fill="#FCE3C2"/><path d="M62 120 q4 8 0 14 M98 120 q-4 8 0 14" stroke="#D9822B" stroke-width="4" stroke-linecap="round" fill="none"/><ellipse cx="52" cy="172" rx="17" ry="8" fill="#F0A04B"/><ellipse cx="108" cy="172" rx="17" ry="8" fill="#F0A04B"/><path d="M54 128 q-8 14 -2 34" stroke="#F0A04B" stroke-width="15" stroke-linecap="round" fill="none"/><path d="M46 66 L50 26 L78 48 Z" fill="#F0A04B"/><path d="M114 66 L110 26 L82 48 Z" fill="#F0A04B"/><path d="M54 56 L55 38 L68 48 Z" fill="#F7B9B0"/><path d="M106 56 L105 38 L92 48 Z" fill="#F7B9B0"/><circle cx="80" cy="84" r="38" fill="#F0A04B"/><path d="M80 48 v10 M70 50 l3 9 M90 50 l-3 9" stroke="#D9822B" stroke-width="3.5" stroke-linecap="round"/><ellipse cx="80" cy="98" rx="21" ry="14" fill="#FCE3C2"/><g class="eyes-open"><ellipse cx="66" cy="84" rx="5" ry="6.5" fill="#2B2118"/><ellipse cx="94" cy="84" rx="5" ry="6.5" fill="#2B2118"/><circle cx="67.5" cy="81.5" r="1.8" fill="#fff"/><circle cx="95.5" cy="81.5" r="1.8" fill="#fff"/></g><g class="eyes-happy" fill="none" stroke="#2B2118" stroke-width="3.5" stroke-linecap="round"><path d="M58 86 q8 -9 16 0"/><path d="M86 86 q8 -9 16 0"/></g><path d="M76 94 h8 l-4 5 z" fill="#E58B8B"/><path d="M80 99 v3 M80 102 q-5 5 -10 1 M80 102 q5 5 10 1" stroke="#2B2118" stroke-width="2" stroke-linecap="round" fill="none"/><path d="M58 98 h-24 M58 103 l-22 6 M102 98 h24 M102 103 l22 6" stroke="#8A6A48" stroke-width="2" stroke-linecap="round" opacity=".55"/><g class="arm"><path d="M106 126 q16 6 20 28" stroke="#F0A04B" stroke-width="16" stroke-linecap="round" fill="none"/><g class="bundle"><rect x="114" y="146" width="26" height="16" rx="2.5" fill="#7FBF8E" stroke="#4E8E5E" stroke-width="2"/><rect x="118" y="150" width="18" height="8" rx="1.5" fill="none" stroke="#4E8E5E" stroke-width="1.2"/><text x="127" y="157.5" font-size="8" text-anchor="middle" fill="#2F6B40" font-weight="700">₹</text></g><circle cx="124" cy="156" r="9" fill="#F0A04B"/></g></svg>`;
+  function stopCat(){clearTimeout(catT);const s=$("#catstage");s.innerHTML="";s.hidden=true;}
+  function playCat(){
+    stopCat(); if(REDUCED) return;
+    const s=$("#catstage"); s.hidden=false;
+    const W=s.clientWidth||360, H=s.clientHeight||600;
+    const catL=Math.max(6,Math.round(W*.03)), ox=catL+122, oy=80;
+    const cols=["#7FBF8E","#E8A85F","#A99BDD","#CDBBA0","#7FBF8E","#E58FA8"];
+    let notes="";
+    for(let i=0;i<18;i++){
+      const wave=Math.floor(i/6), dx=Math.round((W-ox-34)*(.2+Math.random()*.8));
+      const up=Math.round(H*(.2+Math.random()*.4)), fall=Math.round(oy+Math.random()*30);
+      const r=(Math.random()<.5?-1:1)*Math.round(180+Math.random()*360);
+      const d=(.92+wave*.15+(i%6)*.05).toFixed(2), t=(1.5+Math.random()*.5).toFixed(2);
+      notes+=`<i class="note" style="--ox:${ox}px;--oy:${oy}px;--dx:${dx}px;--up:${up}px;--fall:${fall}px;--r:${r}deg;--d:${d}s;--t:${t}s;--c:${cols[i%cols.length]}"><b>₹</b></i>`;
+    }
+    s.innerHTML=`<div class="cat" style="left:${catL}px"><div class="cat-hop">${CAT_SVG}</div></div><div class="bubble" style="left:${catL+8}px">Payment done!</div>${notes}`;
+    catT=setTimeout(stopCat,3400);
+  }
+  function showResult(t){
+    stopCat();
+    const ok=t.status==="success"; stack=[]; go("v-result","replace");
+    const badge=$("#res-badge"); badge.className="badge "+(ok?"ok":"bad");
+    badge.innerHTML=ok
+      ?'<svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><circle class="c" cx="26" cy="26" r="23"/><path class="t" d="M15 27l8 8 14-16"/></svg>'
+      :'<svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"><path class="x" d="M17 17l18 18"/><path class="x x2" d="M35 17L17 35"/></svg>';
+    const burst=$("#burst"); burst.innerHTML="";
+    if(ok&&!REDUCED){
+      const cols=["var(--accent)","#F4B400","var(--ok)","#2F5FD0","var(--accent)"];
+      for(let i=0;i<12;i++){const s=document.createElement("i");s.style.setProperty("--a",(i*30)+"deg");s.style.setProperty("--c",cols[i%cols.length]);burst.appendChild(s);}
+    }
+    $("#res-title").textContent=ok?"Payment successful":"Payment failed";
+    $("#res-amt").textContent=fmt(t.amount);
+    const rows=[["Paid to",t.payee],["Transaction ID",t.id],["Order ID",t.order_id],["Paid with",t.method_label]];
+    if(!ok) rows.push(["Error code",t.error_code],["What happened",t.error_reason]);
+    rows.push(["Time",new Date(t.created_at).toLocaleString("en-IN")]);
+    $("#res-kv").innerHTML=rows.map(([k,v])=>`<dt>${k}</dt><dd${/ID|code/.test(k)?' class="mono"':''}>${esc(v)}</dd>`).join("");
+    const p=$("#res-primary"), s=$("#res-secondary"), redir=$("#redir");
+    if(ok){
+      p.textContent="Done"; s.hidden=true; redir.hidden=false; playCat();
+      const back=()=>{orderId=newOrderId();$("#order-id").textContent=orderId;closeCheckout();toast("Payment successful");};
+      p.onclick=back;
+      let n=4; $("#redir-txt").textContent=`Returning to ${MERCHANT} in ${n}s`;
+      timers.push(setInterval(()=>{n--;if(n<=0){back();return;}$("#redir-txt").textContent=`Returning to ${MERCHANT} in ${n}s`;},1000));
+    }else{
+      redir.hidden=true; p.textContent="Try again"; s.hidden=false;
+      p.onclick=()=>{stack=["v-methods"];go(lastMethodView,"replace");};
+      s.onclick=()=>{stack=[];go("v-methods","replace");};
+    }
+    setTimeout(()=>p.focus({preventScroll:true}),60);
+  }
+
+  // ---------- Activity ----------
+  const KEY="paykaro.transactions"; let mem=[];
+  function load(){try{return JSON.parse(localStorage.getItem(KEY))||mem;}catch(e){return mem;}}
+  function save(t){mem=[t,...load()].slice(0,50);try{localStorage.setItem(KEY,JSON.stringify(mem));}catch(e){}render();}
+  const OKI='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+  const BADI='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7L7 17"/></svg>';
+  function render(){
+    const list=load(); $("#hist-empty").hidden=list.length>0;
+    $("#hist-list").innerHTML=list.map(t=>{
+      const ok=t.status==="success";
+      const chip=ok?'<span class="chip ok">Success</span>':`<span class="chip bad" title="${esc(t.error_reason||"")}">${esc((t.error_code||"Failed").replace(/_/g," ").toLowerCase().replace(/^./,c=>c.toUpperCase()))}</span>`;
+      return `<li class="tx"><div class="txic ${ok?"ok":"bad"}">${ok?OKI:BADI}</div><div class="txmain"><b>${esc(t.payee||"Payment")}</b><span>${esc(t.method_label)} · ${new Date(t.created_at).toLocaleString("en-IN",{dateStyle:"short",timeStyle:"short"})}</span><code class="mono">${t.id}</code></div><div class="txamt"><b>${fmt(t.amount)}</b>${chip}</div></li>`;
+    }).join("");
+  }
+  $("#clear-hist").addEventListener("click",()=>{mem=[];try{localStorage.removeItem(KEY);}catch(e){}render();toast("Activity cleared");});
+  $("#copy-json").addEventListener("click",()=>copyText(JSON.stringify(load(),null,2),"Copied as JSON"));
+
+  refreshHero(); refreshAmount(); render();
+})();
+</script>
+</body>
+</html>
